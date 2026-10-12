@@ -1,0 +1,6 @@
+---
+- name: Apply VPS baseline
+  hosts: all
+  become: true
+  roles:
+    - baseline

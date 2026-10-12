@@ -1,0 +1,70 @@
+---
+- name: Install base packages
+  ansible.builtin.apt:
+    name: [sudo, curl, ca-certificates, gnupg, nftables, fail2ban, unattended-upgrades, chrony]
+    state: present
+    update_cache: true
+
+- name: Set timezone
+  community.general.timezone:
+    name: "{{ timezone }}"
+
+- name: Create admin user
+  ansible.builtin.user:
+    name: "{{ admin_user }}"
+    groups: sudo
+    append: true
+    shell: /bin/bash
+
+- name: Authorise SSH keys
+  ansible.posix.authorized_key:
+    user: "{{ admin_user }}"
+    key: "{{ item }}"
+  loop: "{{ admin_ssh_keys }}"
+
+- name: Passwordless sudo for admin
+  ansible.builtin.copy:
+    dest: "/etc/sudoers.d/{{ admin_user }}"
+    content: "{{ admin_user }} ALL=(ALL) NOPASSWD:ALL\n"
+    mode: "0440"
+    validate: "visudo -cf %s"
+
+- name: Harden sshd
+  ansible.builtin.template:
+    src: sshd_config.j2
+    dest: /etc/ssh/sshd_config.d/10-baseline.conf
+    mode: "0644"
+  notify: restart sshd
+
+- name: Configure nftables
+  ansible.builtin.template:
+    src: nftables.conf.j2
+    dest: /etc/nftables.conf
+    mode: "0644"
+  notify: reload nftables
+
+- name: Enable services
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop: [nftables, fail2ban, chrony]
+
+- name: Enable unattended security upgrades
+  ansible.builtin.copy:
+    dest: /etc/apt/apt.conf.d/20auto-upgrades
+    content: |
+      APT::Periodic::Update-Package-Lists "1";
+      APT::Periodic::Unattended-Upgrade "1";
+    mode: "0644"
+
+- name: Limit journald size
+  ansible.builtin.copy:
+    dest: /etc/systemd/journald.conf.d/size.conf
+    content: "[Journal]\nSystemMaxUse=200M\n"
+    mode: "0644"
+  notify: restart journald
+
+- name: Install Docker
+  ansible.builtin.include_tasks: docker.yml
+  when: install_docker
