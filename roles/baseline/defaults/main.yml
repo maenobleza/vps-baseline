@@ -1,0 +1,7 @@
+---
+admin_user: mae
+admin_ssh_keys: []
+ssh_port: 22
+open_tcp_ports: [22, 80, 443]
+install_docker: true
+timezone: Etc/UTC
